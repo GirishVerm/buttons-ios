@@ -7,10 +7,34 @@
 
 import SwiftUI
 
+
+struct CircleView: View {
+    var row: Int
+    var column: Int
+    var isActivated: Bool
+    var isFailed: Bool
+    var matrix: Array<Array<Int>>
+    var action: () -> Void
+
+    var body: some View {
+        Circle()
+            .frame(width: 40, height: 40)
+            .foregroundColor(isActivated ? Color.green : isFailed ? Color.red : Color.white)
+            .overlay(
+                Circle()
+                    .stroke(matrix[row][column] == 1 ? Color.black : Color.white, lineWidth: 2)
+            )
+            .onTapGesture(perform: action)
+    }
+}
+
 struct ContentView: View {
     
     @State var matrix = Array(repeating: Array(repeating: 0, count: 5), count: 5);
+    @State private var matrixStates: [[Bool]] = Array(repeating: Array(repeating: false, count: 5), count: 5)
+
     @State var level: Int = 2;
+    
     
     func isLegal(a: Int,b: Int) -> Bool{
         if a <= 4 && b <= 4 && a >= 0 && b >= 0 {
@@ -102,40 +126,100 @@ struct ContentView: View {
         
     }
     
-    
+    @State var win = false
+    @State private var timer: Timer?
    
     var body: some View {
-        VStack(alignment: .leading) {
-            ForEach(0..<5) { row in
-                HStack { // Adjust spacing as needed
-                    ForEach(0..<5) { column in
-                        Text(matrix[row][column] == 1 ? String(matrix[row][column]) : " ")
-                            .frame(width: 40, height: 40) // Adjust the size as needed
-                            .overlay(
-                                Circle()
-                                    .stroke(matrix[row][column] == 1 ? Color.black : Color.white, lineWidth: 2)
-                            )
-                            .background(
-                                Circle()
-                                    .fill(Color.white) // Or any other color you prefer
-                            )
-                            .onTapGesture {
-                                // Handle the user's tap
-                                level += 1
-                                print(level)
-                                // Your existing code
-                                matrix = Array(repeating: Array(repeating: 0, count: 5), count: 5)
-                                BFS(matrix: &matrix, levelParam: level)
-                            }
+        HStack{
+            VStack{
+                ForEach((2...25).reversed(), id: \.self) { index in
+                    
+                    let opacity_: Double = index == level ? 1.0 : 0.2
+                    
+                    
+                    HStack{
+                        Text(index == level ? String(level) : "")
+                        Rectangle()
+                            .frame(width: 5, height: 10)
+                            .foregroundColor(Color.black.opacity(opacity_))
+                            .cornerRadius(5)
+                            
                     }
+                    
+                      
                 }
-                // Offset every other row
             }
+            .padding(.horizontal, 0)
+            .edgesIgnoringSafeArea(.horizontal)
+            
+            VStack(alignment: .leading) {
+                ForEach(0..<5, id: \.self) { row in
+                    HStack { // Adjust spacing as needed
+                        ForEach(0..<5, id: \.self) { column in
+                            
+                            
+                            
+                            Circle()
+                                .frame(width: 40, height: 40)
+                                .foregroundColor(matrixStates[row][column] ? Color.green : matrixStates[row][column] == NULL ? Color.red : Color.white)
+                                .overlay(
+                                    Circle()
+                                        .stroke(matrix[row][column] == 1 ? Color.black : Color.white, lineWidth: 2)
+                                )
+                                .onTapGesture {
+                                    // Handle the user's tap
+                                    let chance = Int.random(in: 0...10)
+                                    
+                                    if (chance <= 5){
+                                        
+                                        matrixStates[row][column] = true;
+                                        
+                                        
+                                        timer?.invalidate()
+                                        // Start a new timer that fires after 1 second
+                                        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: false) { _ in
+                                            level += 1
+                                  
+                                        }
+                                        
+                                    }else{
+                                        matrixStates[row][column] = NULL;
+                                        
+                                        timer?.invalidate()
+                                        // Start a new timer that fires after 1 second
+                                        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: false) { _ in
+                                            level = 2
+                                            // Your existing code
+                                            
+                                        }
+                                    }
+                                    
+                                    matrix = Array(repeating: Array(repeating: 0, count: 5), count: 5)
+                                    BFS(matrix: &matrix, levelParam: level)
+                                    matrixStates = Array(repeating: Array(repeating: false, count: 5), count: 5)
+                                    
+                                    
+                                    
+                                    
+                                    
+                                }
+                            
+                        }
+                    }.edgesIgnoringSafeArea(.horizontal)
+                    // Offset every other row
+                }
+            }
+            .padding()
+            .edgesIgnoringSafeArea(.horizontal)
+            .onAppear{
+                BFS(matrix: &matrix, levelParam: level)
+            }
+            
         }
-        .padding()
-        .onAppear{
-            BFS(matrix: &matrix, levelParam: level)
-        }
+        .padding(.horizontal,0)
+        .edgesIgnoringSafeArea(.horizontal)
+        
+        
 
     }
 }
