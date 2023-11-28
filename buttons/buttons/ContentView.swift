@@ -6,35 +6,57 @@
 //
 
 import SwiftUI
+import FirebaseCore
+import FirebaseDatabaseInternal
 
-
-struct CircleView: View {
+struct CircleButtonView: View {
     var row: Int
     var column: Int
-    var isActivated: Bool
-    var isFailed: Bool
     var matrix: Array<Array<Int>>
+    var matrixState: Array<Array<Int>>
     var action: () -> Void
 
     var body: some View {
-        Circle()
-            .frame(width: 40, height: 40)
-            .foregroundColor(isActivated ? Color.green : isFailed ? Color.red : Color.white)
-            .overlay(
-                Circle()
-                    .stroke(matrix[row][column] == 1 ? Color.black : Color.white, lineWidth: 2)
-            )
-            .onTapGesture(perform: action)
+        ZStack {
+            Circle()
+                .frame(width: 50, height: 50)
+                .foregroundColor(
+                    matrix[row][column] == 1 && matrixState[row][column] == 1 ? Color.green 
+                    :
+                    matrix[row][column] == 1 && matrixState[row][column] == 2 ? Color.red
+                    :
+                        Color.white
+                )
+                .overlay(
+                    Circle()
+                        .stroke(matrix[row][column] == 1 ? Color.black : Color.white, lineWidth: 2)
+                    
+                )
+                .overlay(
+                    Image(systemName: matrixState[row][column] == 1 ? "checkmark.circle": "xmark.circle")
+                        .foregroundColor(.white)
+                        .font(.system(size: 40))
+                
+                )
+                .onTapGesture{
+                    if matrix[row][column] == 1 {
+                        action()
+                    }
+                }
+
+            
+        }
     }
 }
 
 struct ContentView: View {
-    
-    @State var matrix = Array(repeating: Array(repeating: 0, count: 5), count: 5);
-    @State private var matrixStates: [[Bool]] = Array(repeating: Array(repeating: false, count: 5), count: 5)
 
+    var ref = Database.database().reference();
+    @State var matrix = Array(repeating: Array(repeating: 0, count: 5), count: 5);
+    @State private var matrixStates = Array(repeating: Array(repeating: 0, count: 5), count: 5);
     @State var level: Int = 2;
-    
+    @State private var timer: Timer?
+    @State private var showLeaderboard = false
     
     func isLegal(a: Int,b: Int) -> Bool{
         if a <= 4 && b <= 4 && a >= 0 && b >= 0 {
@@ -43,7 +65,6 @@ struct ContentView: View {
             
         return false
     }
-       
     
     func BFS(matrix: inout Array<Array<Int>>, levelParam: Int){
         
@@ -60,11 +81,9 @@ struct ContentView: View {
             opened.append([2, 2])
         }
         
-        print(opened)
         
         
         while opened.count > 0 && level > 0 {
-            print(level)
             
             var node:Array<Int> = opened.removeFirst()
             closed.append(node)
@@ -119,110 +138,135 @@ struct ContentView: View {
             }
         }
         
-        print(matrix)
             
         
         
         
     }
     
-    @State var win = false
-    @State private var timer: Timer?
-   
-    var body: some View {
-        HStack{
-            VStack{
-                ForEach((2...25).reversed(), id: \.self) { index in
-                    
-                    let opacity_: Double = index == level ? 1.0 : 0.2
-                    
-                    
-                    HStack{
-                        Text(index == level ? String(level) : "")
-                        Rectangle()
-                            .frame(width: 5, height: 10)
-                            .foregroundColor(Color.black.opacity(opacity_))
-                            .cornerRadius(5)
-                            
-                    }
-                    
-                      
-                }
-            }
-            .padding(.horizontal, 0)
-            .edgesIgnoringSafeArea(.horizontal)
-            
-            VStack(alignment: .leading) {
-                ForEach(0..<5, id: \.self) { row in
-                    HStack { // Adjust spacing as needed
-                        ForEach(0..<5, id: \.self) { column in
-                            
-                            
-                            
-                            Circle()
-                                .frame(width: 40, height: 40)
-                                .foregroundColor(matrixStates[row][column] ? Color.green : matrixStates[row][column] == NULL ? Color.red : Color.white)
-                                .overlay(
-                                    Circle()
-                                        .stroke(matrix[row][column] == 1 ? Color.black : Color.white, lineWidth: 2)
-                                )
-                                .onTapGesture {
-                                    // Handle the user's tap
-                                    let chance = Int.random(in: 0...10)
-                                    
-                                    if (chance <= 5){
-                                        
-                                        matrixStates[row][column] = true;
-                                        
-                                        
-                                        timer?.invalidate()
-                                        // Start a new timer that fires after 1 second
-                                        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: false) { _ in
-                                            level += 1
-                                  
-                                        }
-                                        
-                                    }else{
-                                        matrixStates[row][column] = NULL;
-                                        
-                                        timer?.invalidate()
-                                        // Start a new timer that fires after 1 second
-                                        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: false) { _ in
-                                            level = 2
-                                            // Your existing code
-                                            
-                                        }
-                                    }
-                                    
-                                    matrix = Array(repeating: Array(repeating: 0, count: 5), count: 5)
-                                    BFS(matrix: &matrix, levelParam: level)
-                                    matrixStates = Array(repeating: Array(repeating: false, count: 5), count: 5)
-                                    
-                                    
-                                    
-                                    
-                                    
-                                }
-                            
-                        }
-                    }.edgesIgnoringSafeArea(.horizontal)
-                    // Offset every other row
-                }
-            }
-            .padding()
-            .edgesIgnoringSafeArea(.horizontal)
-            .onAppear{
-                BFS(matrix: &matrix, levelParam: level)
-            }
-            
-        }
-        .padding(.horizontal,0)
-        .edgesIgnoringSafeArea(.horizontal)
-        
-        
+    func updateScoreIfNeeded(with level: Int) {
+        let scoreRef = Database.database().reference(withPath: "users/\(GlobalSettings.uuid)/score")
 
+        scoreRef.runTransactionBlock({ (currentData: MutableData) -> TransactionResult in
+            var score = currentData.value as? Int ?? 0
+            // Only set this to the current level if it's higher
+            if level > score {
+                score = level
+                currentData.value = score
+                return TransactionResult.success(withValue: currentData)
+            }
+            return TransactionResult.abort()
+        }) { (error, committed, snapshot) in
+            if let error = error {
+                print("Transaction failed: \(error.localizedDescription)")
+            }
+            if committed {
+                print("Score updated to: \(snapshot?.value ?? "nil")")
+            }
+        }
+    }
+
+    
+    func action(row: Int, col: Int){
+        
+        print(GlobalSettings.uuid)
+        
+        let chance:Int = level > 4 ? Int.random(in: 0..<level/2) : Int.random(in: 0..<2)
+        
+        if(chance == 0){
+            matrixStates[row][col] = 1;
+            
+            
+            timer?.invalidate()
+    // Start a new timer that fires after 1 second
+            timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: false) { _ in
+                if level >= 25{
+                    level = 2
+                }else{
+                    level += 1
+                    
+                }
+                matrix = Array(repeating: Array(repeating: 0, count: 5), count: 5)
+                BFS(matrix: &matrix, levelParam: level)
+                matrixStates = Array(repeating: Array(repeating: 0, count: 5), count: 5)
+    //
+            }
+        }else{
+            updateScoreIfNeeded(with: level)
+            matrixStates[row][col] = 2;
+            
+            
+            timer?.invalidate()
+    // Start a new timer that fires after 1 second
+            timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: false) { _ in
+                level = 2
+                matrix = Array(repeating: Array(repeating: 0, count: 5), count: 5)
+                BFS(matrix: &matrix, levelParam: level)
+                matrixStates = Array(repeating: Array(repeating: 0, count: 5), count: 5)
+    //
+            }
+        }
+        
+        
+    }
+    
+
+    var body: some View {
+        NavigationView{
+            
+            HStack {
+                // ... Your existing code ...
+
+                VStack(alignment: .leading) {
+                    ForEach(0..<5, id: \.self) { row in
+                        HStack {
+                            ForEach(0..<5, id: \.self) { column in
+                                CircleButtonView(row: row, column: column, matrix: matrix, matrixState: matrixStates) {
+                                    action(row: row, col: column)
+                                }
+                            }
+                        }
+                    }
+                }
+                .padding()
+                .onAppear {
+                    BFS(matrix: &matrix, levelParam: level)
+                }
+            }
+            .toolbar{
+                MultiLineNavigationTitle(line1: "Level " + String(level), line2: GlobalSettings.uuid )
+            }
+            .navigationBarItems(trailing:
+                            NavigationLink(destination: ScoresView()) {
+                                Image(systemName: "person.2.fill")
+                                    .foregroundColor(.black)
+                            }
+                        )
+            .navigationBarTitleDisplayMode(.automatic)
+            .padding(.all, 0)
+            .edgesIgnoringSafeArea(.horizontal)
+        }
+        
+        
     }
 }
+struct MultiLineNavigationTitle: View {
+    var line1: String
+    var line2: String
+
+    var body: some View {
+        VStack {
+            Text(line1)
+                .font(.headline) // Customize the font as needed
+                
+            Text(line2)
+                .textScale(.secondary)
+                .font(.subheadline) // Customize the font as needed
+        }
+    }
+}
+// ... Preview provider ...
+
 
 #Preview {
     ContentView()
